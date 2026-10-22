@@ -83,9 +83,16 @@ export default function App() {
     const imgs = [...fileList].filter((f) => f.type.startsWith('image/'))
     if (!imgs.length) return
     setError('')
-    setUpload({ done: 0, total: imgs.length })
+    setUpload({ done: 0, total: imgs.length, current: 1, progress: 0 })
     for (let i = 0; i < imgs.length; i++) {
       const url = URL.createObjectURL(imgs[i])
+      const startedAt = Date.now()
+      const timer = window.setInterval(() => {
+        const elapsed = Date.now() - startedAt
+        const itemProgress = 0.94 * (1 - Math.exp(-elapsed / 2200))
+        const progress = ((i + itemProgress) / imgs.length) * 100
+        setUpload({ done: i, total: imgs.length, current: i + 1, progress: Math.min(progress, 99) })
+      }, 100)
       try {
         const fp = await fingerprint(url)
         const name = nameOf(imgs[i])
@@ -93,8 +100,11 @@ export default function App() {
         setDb((p) => [...p, { id, name, blob: imgs[i], fp, url }])
       } catch (err) {
         setError(`${imgs[i].name}: ${err.message || 'Could not process this image.'}`)
+      } finally {
+        window.clearInterval(timer)
+        const done = i + 1
+        setUpload({ done, total: imgs.length, current: Math.min(done + 1, imgs.length), progress: (done / imgs.length) * 100 })
       }
-      setUpload({ done: i + 1, total: imgs.length })
     }
     setTimeout(() => setUpload(null), 700)
   }
@@ -199,9 +209,11 @@ export default function App() {
           <input ref={folderRef} type="file" multiple webkitdirectory="" hidden onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
 
           {upload && (
-            <div className="uploading">
-              Saving {upload.done} of {upload.total}
-              <div className="bar"><div style={{ width: (upload.done / upload.total) * 100 + '%' }} /></div>
+            <div className="uploading" role="status" aria-live="polite">
+              {upload.done === upload.total ? `Saved ${upload.done} of ${upload.total}` : `Processing ${upload.current} of ${upload.total}`}
+              <div className="bar" role="progressbar" aria-label="Photo processing progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(upload.progress)}>
+                <div className="upload-progress" style={{ width: `${upload.progress}%` }} />
+              </div>
             </div>
           )}
 
